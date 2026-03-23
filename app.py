@@ -87,7 +87,9 @@ if uploaded_file is not None:
                 trend_data = all_daily_counts[all_daily_counts['商品名称'].isin(top_50_names)]
 
                 # 4. 透视表化：行是商品，列是日期
-                pivot_trend = trend_data.pivot(index='商品名称', columns='日期', values='数量').fillna(0).astype(int)
+                pivot_trend = trend_data.pivot(index='商品名称', columns='日期', values='数量')
+                pivot_trend = pivot_trend.fillna(0).apply(pd.to_numeric)  # 确保全是数字
+                pivot_trend = pivot_trend.astype(int)
 
                 # 5. 排序：按基准日的数量降序排列
                 pivot_trend = pivot_trend.sort_values(by=selected_date, ascending=False)
