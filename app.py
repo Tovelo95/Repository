@@ -1,138 +1,112 @@
 import streamlit as st
 import pandas as pd
 
-# 1. 页面配置：设置网页标题和图标
-st.set_page_config(page_title="BUFF 价格实时分析助手", page_icon="📈", layout="wide")
+# 1. 页面配置
+st.set_page_config(page_title="BUFF 深度分析工具", page_icon="📈", layout="wide")
 
-st.title("📈 BUFF 价格实时分析助手")
+st.title("📈 BUFF 价格与热度深度分析助手")
 st.markdown("---")
 
-# 2. 文件上传区
-uploaded_file = st.file_uploader("📂 请将导出的 CSV 文件拖拽到此处", type=['csv'])
+# 2. 文件上传
+uploaded_file = st.file_uploader("📂 请上传 BUFF 导出的 CSV 文件", type=['csv'])
 
 if uploaded_file is not None:
-    # 读取数据
     df = pd.read_csv(uploaded_file)
 
-    # 核心计算：历史单件利润 = 预期收益 - 成本价
+    # 基础计算
     df['单件利润'] = df['预期收益'] - df['成本价']
-
-    # 时间列配置：根据您的反馈，这里设为 '创建时间'
     time_column = '创建时间'
 
     if time_column in df.columns:
-        # 转换为日期格式
         df['日期'] = pd.to_datetime(df[time_column]).dt.date
 
-        # 3. 日期选择侧边栏/顶部
+        # 3. 日期选择
         min_date = df['日期'].min()
         max_date = df['日期'].max()
-
         st.sidebar.header("🗓️ 数据筛选")
-        selected_date = st.sidebar.date_input(
-            "选择分析日期：",
-            value=max_date,  # 默认显示最新的一天
-            min_value=min_date,
-            max_value=max_date
-        )
+        selected_date = st.sidebar.date_input("选择分析基准日：", value=max_date, min_value=min_date, max_value=max_date)
 
-        # 过滤选中日期的数据
+        # 过滤数据
         filtered_df = df[df['日期'] == selected_date]
 
         if filtered_df.empty:
             st.warning(f"⚠️ {selected_date} 这一天没有交易记录。")
         else:
-            # 4. 顶部大盘指标展示
+            # --- 功能模块 1：当日概况 ---
             st.subheader(f"📊 {selected_date} 经营概况")
-
-            total_qty = len(filtered_df)
-            total_cost = filtered_df['成本价'].sum()
-            total_profit = filtered_df['单件利润'].sum()
-
             m1, m2, m3 = st.columns(3)
-            m1.metric("总销售量", f"{total_qty} 件")
-            m2.metric("总成本", f"¥{total_cost:,.2f}")
-            m3.metric("历史总利润", f"¥{total_profit:,.2f}")
+            m1.metric("总销售量", f"{len(filtered_df)} 件")
+            m2.metric("总成本", f"¥{filtered_df['成本价'].sum():,.2f}")
+            m3.metric("记录总利润", f"¥{filtered_df['单件利润'].sum():,.2f}")
 
+            # --- 功能模块 2：实时调价助手 (Data Editor) ---
             st.divider()
-
-            # 5. 实时价格分析助手 (交互核心)
             st.subheader("⚡ 实时调价与利润复算")
-            st.info("💡 操作指南：在下方表格【当日实时价】列直接输入价格，完成后点击下方的蓝色按钮。")
-
-            # 基础汇总：按商品名称分组
             item_summary = filtered_df.groupby('商品名称').agg(
                 购买数量=('商品名称', 'count'),
                 平均历史成本=('成本价', 'mean'),
                 平均历史利润=('单件利润', 'mean'),
                 历史总利润=('单件利润', 'sum')
-            ).reset_index()
-            item_summary = item_summary.round(2).sort_values(by='购买数量', ascending=False)
+            ).reset_index().round(2).sort_values(by='购买数量', ascending=False)
 
-            # 新增一列用于手动填充
             item_summary['当日实时价'] = 0.0
-
-            # 使用 data_editor 创建可编辑表格
             edited_df = st.data_editor(
                 item_summary,
                 column_config={
-                    "当日实时价": st.column_config.NumberColumn(
-                        "当日实时价 (手动填入)",
-                        help="在这里输入该商品今天的最新市场价格",
-                        min_value=0.0,
-                        format="%.2f",
-                        required=True,
-                    ),
+                    "当日实时价": st.column_config.NumberColumn("当日实时价 (手动填充)", format="%.2f"),
                     "商品名称": st.column_config.Column(width="medium", disabled=True),
                     "购买数量": st.column_config.Column(disabled=True),
-                    "平均历史成本": st.column_config.Column("历史成本(均价)", disabled=True),
-                    "平均历史利润": st.column_config.Column("记录利润(均价)", disabled=True),
-                    "历史总利润": st.column_config.Column(disabled=True),
+                    "平均历史成本": st.column_config.Column("历史成本", disabled=True),
+                    "平均历史利润": st.column_config.Column("记录利润", disabled=True),
                 },
-                hide_index=True,
-                use_container_width=True,
+                hide_index=True, use_container_width=True,
             )
 
-            # 6. 计算按钮逻辑
-            if st.button("🚀 点击计算实时分析结果", type="primary"):
-                # 计算新维度
-                # 实时单件利润 = 实时价 - 历史成本
+            if st.button("🚀 计算实时分析结果", type="primary"):
                 edited_df['实时单件利润'] = edited_df['当日实时价'] - edited_df['平均历史成本']
-                # 利润变动 = 实时利润 - 记录利润
-                edited_df['利润变动情况'] = edited_df['实时单件利润'] - edited_df['平均历史利润']
-                # 实时总利润预估 = 实时单件利润 * 数量
-                edited_df['实时预估总利润'] = (edited_df['实时单件利润'] * edited_df['购买数量']).round(2)
+                edited_df['实时总利润'] = (edited_df['实时单件利润'] * edited_df['购买数量']).round(2)
+                st.dataframe(edited_df[['商品名称', '购买数量', '当日实时价', '实时单件利润', '实时总利润']],
+                             use_container_width=True, hide_index=True)
 
-                # 整理显示顺序
-                result_display = edited_df[
-                    ['商品名称', '购买数量', '平均历史成本', '当日实时价', '实时单件利润', '利润变动情况',
-                     '实时预估总利润']]
-
-                st.write("#### ✅ 分析报告")
-                st.dataframe(result_display, use_container_width=True, hide_index=True)
-
-                # 实时汇总卡片
-                realtime_total = result_display['实时预估总利润'].sum()
-                profit_diff = realtime_total - total_profit
-
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.metric("实时预估总利润汇总", f"¥{realtime_total:,.2f}", delta=f"{profit_diff:.2f} (对比历史)")
-                with c2:
-                    # 导出实时计算结果
-                    csv_res = result_display.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-                    st.download_button("📥 下载此实时分析报表", data=csv_res,
-                                       file_name=f"Realtime_Analysis_{selected_date}.csv")
-
-            # 7. 原始数据下载 (底部备选)
+            # --- 功能模块 3：【新增】Top 50 热品历史趋势对比 ---
             st.divider()
-            with st.expander("💾 导出原始统计报表"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    csv_item = item_summary.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-                    st.download_button("下载当日商品统计", data=csv_item, file_name=f"Item_Summary_{selected_date}.csv")
+            st.subheader("🔍 Top 50 热品趋势追踪")
+            st.write(f"分析说明：提取 **{selected_date}** 销量前 50 的商品，并对比它们在历史每一天的购买数量。")
+
+            # 1. 计算全表每日每种商品的购买数量
+            all_daily_counts = df.groupby(['日期', '商品名称']).size().reset_index(name='数量')
+
+            # 2. 获取基准日(selected_date)的 Top 50
+            top_50_names = all_daily_counts[all_daily_counts['日期'] == selected_date].nlargest(50, '数量')[
+                '商品名称'].tolist()
+
+            if not top_50_names:
+                st.info("该日没有足够的数据进行 Top 50 分析。")
+            else:
+                # 3. 提取这些商品在所有日期的表现
+                trend_data = all_daily_counts[all_daily_counts['商品名称'].isin(top_50_names)]
+
+                # 4. 透视表化：行是商品，列是日期
+                pivot_trend = trend_data.pivot(index='商品名称', columns='日期', values='数量').fillna(0).astype(int)
+
+                # 5. 排序：按基准日的数量降序排列
+                pivot_trend = pivot_trend.sort_values(by=selected_date, ascending=False)
+
+                # 6. 展示：使用热力图色阶 (颜色越深代表数量越多)
+                st.dataframe(
+                    pivot_trend.style.background_gradient(axis=1, cmap='Greens'),
+                    use_container_width=True
+                )
+
+                st.caption(
+                    "💡 提示：表格中颜色越绿的部分，代表该商品在当天的进货频率越高。你可以横向查看某个热销品是否在持续进货。")
+
+            # 8. 底部下载
+            st.divider()
+            csv_data = pivot_trend.to_csv(index=True, encoding='utf-8-sig').encode('utf-8-sig')
+            st.download_button("📥 下载 Top 50 趋势分析表", data=csv_data, file_name=f"Top50_Trend_{selected_date}.csv")
 
     else:
-        st.error(f"❌ 找不到名为 '{time_column}' 的列，请确认 CSV 文件格式是否正确。")
+        st.error(f"❌ 找不到名为 '{time_column}' 的列。")
 else:
-    st.info("👋 欢迎！请在上方上传 BUFF 导出的 CSV 文件开始分析。")
+    st.info("👋 欢迎！请上传 BUFF 导出 CSV 文件开始分析。")
