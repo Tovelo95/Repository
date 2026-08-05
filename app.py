@@ -6,16 +6,18 @@ st.set_page_config(page_title="BUFF 价格与热度深度分析助手", page_ico
 st.title("📈 BUFF 价格与热度深度分析助手")
 st.markdown("---")
 
+
 def find_column(col_list, keywords):
     for col in col_list:
         if all(kw in col for kw in keywords):
             return col
     return None
 
+
 uploaded_file = st.file_uploader("📂 请上传 BUFF 导出的 CSV 文件", type=['csv'])
 
 if uploaded_file is not None:
-    file_mb = round(uploaded_file.size / 1024 / 1024, 2)
+    file_mb = round(uploaded_file.size / 1024, 2)
     st.info(f"文件已接收，大小：{file_mb} MB，正在解析...")
 
     with st.spinner("🔄 解析CSV文件中，请等待..."):
@@ -93,8 +95,8 @@ if uploaded_file is not None:
                 "当日实时价": st.column_config.NumberColumn("当日实时价 (手动填充)", format="%.2f"),
                 name_col: st.column_config.Column(width="medium", disabled=True),
                 "购买数量": st.column_config.Column(disabled=True),
-                "平均历史成本": st.column_config.Column(disabled=True),
-                "平均历史利润": st.column_config.Column(disabled=True),
+                "平均历史成本": st.column_config.Column("历史成本", disabled=True),
+                "平均历史利润": st.column_config.Column("区间单件记录利润", disabled=True),
             },
             hide_index=True, use_container_width=True
         )
@@ -122,8 +124,10 @@ if uploaded_file is not None:
             pivot_trend = trend_data.pivot(index=name_col, columns="日期", values="数量")
             pivot_trend = pivot_trend.fillna(0).astype(int)
 
-            sort_index = range_total.set_index(name_col)['区间总销量'].index
-            pivot_trend = pivot_trend.loc[sort_index]
+            # 只保留透视表里存在的商品进行排序，杜绝KeyError
+            valid_items = range_total[range_total[name_col].isin(pivot_trend.index)]
+            valid_sort = valid_items.set_index(name_col)
+            pivot_trend = pivot_trend.loc[valid_sort.index]
 
             st.dataframe(pivot_trend, use_container_width=True)
             st.caption("💡 单元格数值代表当日进货件数，横向观察商品热度变化")
@@ -134,4 +138,4 @@ if uploaded_file is not None:
         st.download_button("📥 下载Top50趋势分析表", data=csv_bytes, file_name=fn)
 
 else:
-    st.info("👋 欢迎！请上传 BUFF 导出 CSV 文件开始分析。")
+    st.info("👋 欢迎！请上传 BUFF 导出 CSV 文件开始分析。```")
